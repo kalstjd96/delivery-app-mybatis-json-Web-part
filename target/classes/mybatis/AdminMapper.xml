@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jang.doc.mapper.AdminMapper">
+	
+	<!-- 바코드로 읽어온 운송장번호로 회원 보관함번호 조회 -->
+	<select id="BarcodeRead" resultType="String">
+		select SNO from AAA_MEMBER where PHONE = 
+		(select RE_PHONE from AAA_DELIVERY_CHART where WAYBILL_NUMBER = #{barcode})
+
+	</select>
+	
+	<!-- 바코드로 읽어온 운송장번호로 배송상태 조회해서 배송됐는지안됐는지 확인 -->
+	<select id="BarcodeChk" resultType="String">
+		select delivery_type from (select * from AAA_DELIVERY_STATE order by delivery_type desc) where WAYBILL_NUMBER = #{barcode} and rownum = 1
+	</select>
+	
+	
+	<!-- 운송장번호의 우편번호로 해당사물함조회 -->
+	<select id="LockerList" resultType="ALockerVO">
+		select * from AAA_LOCKER where L_ADDR1 = 
+		(select RE_ADDR1 from AAA_DELIVERY_CHART where WAYBILL_NUMBER = #{WAYBILL_NUMBER}) order by L_NAME
+		
+		
+	</select>
+	
+	<select id="get_token" resultType="String">
+		select token from AAA_MEMBER where phone = (select re_phone from AAA_DELIVERY_CHART where waybill_number = #{WAYBILL_NUMBER})
+	</select>
+	
+	
+	<!-- 사물함일련번호로 상세 사물함 조회 -->
+	<select id="LockerDetailList" resultType="ALockerVO">
+		select * from AAA_LOCKER_CHART JOIN aaa_locker on AAA_LOCKER_CHART.LNO = aaa_locker.LNO where AAA_LOCKER_CHART.LNO = #{LNO} order by DETAIL_NO
+	</select>
+	
+	<!-- 사물함상세일련번호로 상세 사물함 조회 -->
+	<select id="LockerDetail" resultType="ALockerVO">
+		select * from AAA_LOCKER_CHART JOIN aaa_locker on AAA_LOCKER_CHART.LNO = aaa_locker.LNO where AAA_LOCKER_CHART.SNO = #{SNO} 
+	</select>
+	
+	<!-- 사물함번호와 nfcid로 유효성검사 -->
+	<select id="Admin_LockerDao" resultType="String">
+		select SNO from AAA_LOCKER_CHART where nfcid = #{NFCID} and sno =#{SNO}
+	</select>
+	
+	<!--해당 보관함의 물품상태 및 잠금상태 확인 -->
+	<update id="Locker_update" parameterType="String">
+		update AAA_LOCKER_CHART set LOCKER_CHK = #{LOCKER_CHK}, PRODUCT_CHK = #{PRODUCT_CHK} where NFCID = #{NFCID}
+	</update>
+	<!-- 배송완료후 대당회원 사물함번호 업데이트 -->
+	<update id="memberLocker_update" parameterType="String">
+		update AAA_MEMBER set SNO = #{SNO} where PHONE = (select RE_PHONE from AAA_DELIVERY_CHART where WAYBILL_NUMBER = #{WAYBILL_NUMBER})
+	</update>
+	<!-- 배송완료해서 배송상태 테이블이 인서트 -->
+	<insert id="delivery_end" parameterType="String">
+		insert into AAA_DELIVERY_STATE (DLNO, SNO, DELIVERY_TYPE, DELIVERY_INFORMATION, DELIVERY_LOCATION, COURIER_NO, DNO, WAYBILL_NUMBER) 
+		values(AAA_DLNO_SEQ.nextval, #{SNO}, '3', '배송이 완료되었습니다.', #{ADDR}, #{COURIER_NO}, (select DNO from AAA_DELIVERY_CHART where WAYBILL_NUMBER = #{WAYBILL_NUMBER}),#{WAYBILL_NUMBER})
+	</insert>
+	
+	<!-- 택배예약상품 인수가해서 배송상태 테이블에 인서트  -->
+	<insert id="delivery_Reservation" parameterType="String">
+		insert into AAA_DELIVERY_STATE (DLNO, SNO, DELIVERY_TYPE, DELIVERY_INFORMATION, DELIVERY_LOCATION, COURIER_NO, DNO, WAYBILL_NUMBER) 
+		values(AAA_DLNO_SEQ.nextval, '', '1', '고객님으로 부터 상품을 인수 받았습니다.', #{ADDR}||' '||'지점', #{COURIER_NO}, (select DNO from AAA_DELIVERY_CHART where WAYBILL_NUMBER = #{WAYBILL_NUMBER}),#{WAYBILL_NUMBER})
+	</insert>
+	
+	<!-- 택배기사사 배송시작 배송상태 테이블이 인서트 -->
+	<insert id="delivery_Strat" parameterType="String">
+		insert into AAA_DELIVERY_STATE (DLNO, SNO, DELIVERY_TYPE, DELIVERY_INFORMATION, DELIVERY_LOCATION, COURIER_NO, DNO, WAYBILL_NUMBER) 
+		values(AAA_DLNO_SEQ.nextval, '', '2', '고객님의 상품을 배송할 예정입니다.', #{ADDR}||' '||'지점', #{COURIER_NO}, (select DNO from AAA_DELIVERY_CHART where WAYBILL_NUMBER = #{WAYBILL_NUMBER}),#{WAYBILL_NUMBER})
+	</insert>
+	
+	
+	
+	
+	<!-- 관리자로그인 -->
+	<select id="admin_JoinDao" resultType="AdminVO">
+		select * from AAA_COURIER where ID = #{userID} and PASS = #{userPWD}
+	</select>
+	
+	<!-- 택배기사가 자기 지역으로 배송목록검색 -->
+	<select id="DeliveryList" resultType="DeliveryVO">
+		select * from aaa_delivery_state a  join aaa_delivery_chart b on a.WAYBILL_NUMBER = b.WAYBILL_NUMBER 
+		where (a.WAYBILL_NUMBER, a.process_date) in (select WAYBILL_NUMBER, max (process_date) from aaa_delivery_state group by WAYBILL_NUMBER) and RE_ADDR2 like '%'||#{AREA}||'%' and DELIVERY_TYPE = '1' and sno is null
+		order by a.process_date DESC
+	</select>
+	
+	<!-- 택배기사가 자기 지역으로 예약목록검색 -->
+	<select id="ReservationList" resultType="DeliveryVO">
+		select * from aaa_delivery_state a  join aaa_delivery_chart b on a.WAYBILL_NUMBER = b.WAYBILL_NUMBER 
+		where (a.WAYBILL_NUMBER, a.process_date) in (select WAYBILL_NUMBER, max (process_date) from aaa_delivery_state group by WAYBILL_NUMBER) and se_ADDR2 like '%'||#{AREA}||'%' and DELIVERY_TYPE = '1' and sno is not null
+		order by a.process_date DESC
+	</select>
+	
+	<!-- 배송상품 운송장번호로 상세 조회 --> 
+	<select id="DeliveryDetail" resultType="DeliveryVO">
+		select * from aaa_delivery_chart where WAYBILL_NUMBER = #{WAYBILL_NUMBER}
+	</select>
+	
+
+	
+</mapper>

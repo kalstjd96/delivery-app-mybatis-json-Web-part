@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.jang.doc.mapper.LoginMapper">
+
+
+
+	<select id="JoinDao" resultType="LoginVO">
+		select ID,PASS,MNO from AAA_MEMBER where ID = #{userID} and PASS = #{userPWD}
+	</select>
+	
+	<update id="TokenUpdate" parameterType="String">
+		update AAA_MEMBER set TOKEN = #{token} where ID = #{id}
+	</update>
+	
+	<insert id="ReservationDao" parameterType="DeliveryVO">
+		<!-- insert into AA_RESERVATION_CHART(rno, join_date, send_name, send_phone, send_addr1, send_addr2, send_addr3,
+				recv_name, recv_phone, recv_addr1, recv_addr2, recv_addr3, product, company, type) 
+				values(CHART_NO_SEQ.NEXTVAL,to_date(#{join_date},'YYYY-MM-DD'),
+				#{send_name},#{send_phone},#{send_addr1},#{send_addr2},#{send_addr3},
+				#{recv_name},#{recv_phone},#{recv_addr1},#{recv_addr2},#{recv_addr3},
+				#{product},#{company},'D') -->
+				
+				insert into AAA_DELIVERY_CHART(DNO, WAYBILL_NUMBER, SE_NAME, SE_PHONE, SE_ADDR1, SE_ADDR2,SE_ADDR3,SE_REQ,
+				RE_NAME, RE_PHONE, RE_ADDR1, RE_ADDR2, RE_ADDR3, 
+                PRODUCT_NAME, PRODUCT_PRICE, PRODUCT_FARE,PRODUCT_FARE_PRICE,CNO) 
+				values(AAA_DNO_SEQ.NEXTVAL, LPAD(AAA_WAYBILLNUM_SEQ.NEXTVAL, 12, '0'),#{se_name},#{se_phone},#{se_addr1},#{se_addr2},#{se_addr3},#{se_req},
+                #{re_name}, #{re_phone}, #{re_addr1}, #{re_addr2}, #{re_addr3}, 
+                #{product_name}, #{product_price},#{product_fare},#{product_fare_price},#{cno})
+				
+	
+	</insert>
+	
+	<!-- 택배예약시 해당 예약번호와 운송장번호 가져오기 -->
+	<select id="ReservationNUM" resultType="DeliveryVO">
+		SELECT AAA_WAYBILLNUM_SEQ.CURRVAL WAYBILL_NUMBER, AAA_DNO_SEQ.CURRVAL DNO FROM DUAL
+	</select>
+	
+	<insert id="Reservation_state" parameterType="DeliveryVO"> 
+		insert into aaa_delivery_state(DLNO, DELIVERY_TYPE, DELIVERY_INFORMATION, DELIVERY_LOCATION, DNO, WAYBILL_NUMBER)
+				values(aaa_dlno_seq.nextval,'0', '택배예약된 상품입니다.', '장소 미지정', #{dno},LPAD(#{waybill_number}, 12, '0'))
+	</insert>
+	
+	<select id="RefundDao" resultType="DeliveryVO">
+		  select * from AAA_DELIVERY_CHART where WAYBILL_NUMBER = #{WAYBILL_NUMBER}
+	</select>
+	
+	<select id="LockerDao" resultType="String">
+		select MNO from aaa_member a join aaa_locker_chart b on a.SNO = b.SNO where NFCID = #{TagID}
+	</select>
+	
+	<select id="LockerOpenCheck" resultType="String">
+		select LOCKER_CHK from AAA_LOCKER_CHART where SNO = #{LNO}
+	</select>
+	
+	<select id="LockerProductCheck" resultType="String">
+		select product_chk from aaa_locker_chart where NFCID = #{NFCID}
+	</select>
+	
+	
+	<!-- 고객이 물건에약하여 사물함선택해서 배송상태에 인설트 -->
+	<insert id="User_Reservation" parameterType="String">
+		insert into aaa_delivery_state(DLNO,SNO, DELIVERY_TYPE, DELIVERY_INFORMATION, DELIVERY_LOCATION, DNO, WAYBILL_NUMBER)
+				values(aaa_dlno_seq.nextval,(select sno from AAA_LOCKER_CHART where NFCID = #{NFCID}),'1', '상품을 수거하기 전입니다.', 
+                (select b.L_ADDR2||' '||b.L_ADDR3||' '|| a.DETAIL_NO||'번 사물함' DELIVERY_LOCATION from AAA_LOCKER_CHART a join AAA_LOCKER b on a.lno = b.lno where a.NFCID = #{NFCID}),
+                (select DNO from aaa_delivery_chart where WAYBILL_NUMBER = #{WAYBILL_NUMBER}) ,#{WAYBILL_NUMBER})
+		
+	
+	</insert>
+	
+	<update id="LockerDoor" parameterType="String">
+		update AAA_LOCKER_CHART set LOCKER_CHK = #{state} where NFCID = #{TagID}
+	</update>
+	
+	<select id="MemberProfile" resultType="LoginVO">
+		select * from AAA_MEMBER where MNO = #{MNO}
+	</select>
+	
+	<select id="LockerProfile" resultType="DeliveryVO">
+		select a.WAYBILL_NUMBER, a.DELIVERY_LOCATION , b.PRODUCT_NAME, a.process_date ,a.sno from aaa_delivery_state a  join aaa_delivery_chart b on a.WAYBILL_NUMBER = b.WAYBILL_NUMBER 
+		where (a.WAYBILL_NUMBER, a.process_date) in (select WAYBILL_NUMBER, max (process_date) from aaa_delivery_state group by WAYBILL_NUMBER) and a.sno = (select SNO from aaa_member where mno=#{MNO})
+		order by a.process_date DESC
+	</select>
+	
+	<!-- 사용자가 택배수령하여 배송상태 테이블에 사물함값 지우기 -->
+	<update id="delivery_state_update" parameterType="String">
+		update aaa_delivery_state set sno = '' where sno = (select sno from AAA_MEMBER where MNO = #{MNO})
+	</update>
+	<!-- 사용자가 택배수령하여 맴버테이블 사물함값 지우기 -->
+	<update id="member_sno_update" parameterType="String">
+		update AAA_member set sno = '' where mno = #{MNO}
+	</update>
+	
+
+	
+	
+	<select id="ListDao" resultType="DeliveryVO">
+		select to_char(a.PROCESS_DATE,'yy/mm/dd') PROCESS_DATE , a.delivery_type, b.PRODUCT_NAME, b.WAYBILL_NUMBER, b.SE_NAME from aaa_delivery_state a  join aaa_delivery_chart b on a.WAYBILL_NUMBER = b.WAYBILL_NUMBER 
+		where (a.WAYBILL_NUMBER, a.process_date) in (select WAYBILL_NUMBER, max (process_date) from aaa_delivery_state group by WAYBILL_NUMBER) and b.re_phone = (select phone from aaa_member where mno=#{MNO})
+		order by a.process_date DESC
+	</select>
+	
+	<select id="SE_ListDao" resultType="DeliveryVO">
+		select to_char(a.PROCESS_DATE,'yy/mm/dd') PROCESS_DATE , a.delivery_type, b.PRODUCT_NAME, b.WAYBILL_NUMBER, b.SE_NAME from aaa_delivery_state a  join aaa_delivery_chart b on a.WAYBILL_NUMBER = b.WAYBILL_NUMBER 
+		where (a.WAYBILL_NUMBER, a.process_date) in (select WAYBILL_NUMBER, max (process_date) from aaa_delivery_state group by WAYBILL_NUMBER) and b.se_phone = (select phone from aaa_member where mno=#{MNO})
+		order by a.process_date DESC
+	</select>
+	
+	<select id="DetailDao" resultType="DeliveryVO">
+		  select to_char(a.PROCESS_DATE,'yy-mm-dd hh24:mi') PROCESS_DATE, a.DELIVERY_LOCATION  ,a.DELIVERY_INFORMATION,a.DELIVERY_TYPE, a.WAYBILL_NUMBER , b.PRODUCT_NAME, b.SE_NAME, b.RE_NAME from aaa_delivery_state a  
+  join aaa_delivery_chart b on a.WAYBILL_NUMBER = b.WAYBILL_NUMBER  where a.WAYBILL_NUMBER = #{WAYBILL_NUMBER} order by a.process_date desc
+	</select>
+
+</mapper>
